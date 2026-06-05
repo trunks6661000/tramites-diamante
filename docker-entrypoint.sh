@@ -5,7 +5,7 @@
 set -e
 
 echo "[entrypoint] aplicando migraciones..."
-npx prisma migrate deploy
+./node_modules/.bin/prisma migrate deploy
 
 if [ "$SEED_ON_START" = "1" ]; then
   echo "[entrypoint] ejecutando seed..."
