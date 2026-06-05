@@ -1,0 +1,10 @@
+node_modules
+.next
+.git
+.env
+.env.local
+.env.*.local
+README.md
+.vscode
+uploads_local/*
+!uploads_local/.gitkeep

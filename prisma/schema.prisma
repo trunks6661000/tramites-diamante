@@ -1,0 +1,265 @@
+// =====================================================================
+// Tramites Diamante - Prisma Schema
+// Plataforma B2B de actas con sistema de creditos
+// =====================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =====================================================================
+// ENUMS
+// =====================================================================
+
+enum Role {
+  ADMIN
+  CLIENTE
+  PROVEEDOR
+}
+
+enum UserStatus {
+  PENDIENTE
+  APROBADO
+  SUSPENDIDO
+  ELIMINADO
+}
+
+enum TipoActa {
+  NACIMIENTO
+  MATRIMONIO
+  DEFUNCION
+}
+
+enum PedidoEstado {
+  PENDIENTE
+  EN_PROCESO
+  LISTO
+  RECHAZADO
+  CANCELADO
+}
+
+enum RecargaEstado {
+  PENDIENTE
+  APROBADA
+  RECHAZADA
+}
+
+enum MovimientoTipo {
+  RECARGA
+  CARGO_PEDIDO
+  AJUSTE_MANUAL
+  REEMBOLSO
+}
+
+enum NotificacionTipo {
+  PEDIDO_CREADO
+  PEDIDO_LISTO
+  PEDIDO_RECHAZADO
+  RECARGA_APROBADA
+  RECARGA_RECHAZADA
+  CUENTA_APROBADA
+  CUENTA_SUSPENDIDA
+}
+
+// =====================================================================
+// USUARIOS + PERFIL CLIENTE
+// =====================================================================
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  passwordHash String
+  name         String
+  role         Role
+  status       UserStatus @default(PENDIENTE)
+  phone        String?
+  lastLoginAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  cliente              Cliente?
+  pedidosComoCliente   Pedido[]            @relation("PedidoCliente")
+  pedidosSubidos       Pedido[]            @relation("PedidoSubidoPor")
+  cambiosEstado        PedidoHistorial[]   @relation("PedidoHistorialActor")
+  recargasRevisadas    Recarga[]           @relation("RecargaRevisadaPor")
+  movimientos          MovimientoCredito[] @relation("MovimientoActor")
+  notificaciones       Notificacion[]
+  logs                 LogAccion[]
+
+  @@index([role, status])
+}
+
+model Cliente {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  razonSocial  String
+  rfc          String?
+  telefono     String?
+  direccion    String?
+  creditos     Int      @default(0) // saldo actual en creditos (1 MXN = 1 credito)
+  notas        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  pedidos     Pedido[]
+  recargas    Recarga[]
+  movimientos MovimientoCredito[]
+
+  @@index([rfc])
+}
+
+// =====================================================================
+// PEDIDOS
+// =====================================================================
+
+model Pedido {
+  id                String       @id @default(cuid())
+  folio             String       @unique // ej. TD-2026-000123
+  clienteId         String
+  cliente           Cliente      @relation(fields: [clienteId], references: [id])
+  userClienteId     String       // denormalizado para indexar por usuario rapido
+  userCliente       User         @relation("PedidoCliente", fields: [userClienteId], references: [id])
+  tipoActa          TipoActa
+  curp              String       // 18 chars uppercase
+  datosAdicionales  Json?        // datos opcionales segun tipo (nombres padres, fecha matrimonio, etc.)
+  creditosCobrados  Int          // costo en creditos al momento del pedido
+  estado            PedidoEstado @default(PENDIENTE)
+  motivoRechazo     String?
+  pdfStorageKey     String?      // key en S3
+  pdfOriginalName   String?
+  pdfSize           Int?
+  pdfMimeType       String?
+  pdfSubidoPorId    String?
+  pdfSubidoPor      User?        @relation("PedidoSubidoPor", fields: [pdfSubidoPorId], references: [id])
+  pdfSubidoAt       DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  historial   PedidoHistorial[]
+  movimientos MovimientoCredito[]
+
+  @@index([clienteId, createdAt(sort: Desc)])
+  @@index([estado, createdAt(sort: Desc)])
+  @@index([curp])
+}
+
+model PedidoHistorial {
+  id             String       @id @default(cuid())
+  pedidoId       String
+  pedido         Pedido       @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  estadoAnterior PedidoEstado?
+  estadoNuevo    PedidoEstado
+  actorId        String?
+  actor          User?        @relation("PedidoHistorialActor", fields: [actorId], references: [id])
+  motivo         String?
+  createdAt      DateTime     @default(now())
+
+  @@index([pedidoId, createdAt])
+}
+
+// =====================================================================
+// CREDITOS + RECARGAS
+// =====================================================================
+
+model Recarga {
+  id              String        @id @default(cuid())
+  folio           String        @unique // ej. RC-2026-000045
+  clienteId       String
+  cliente         Cliente       @relation(fields: [clienteId], references: [id])
+  monto           Int           // en creditos (= MXN)
+  referencia      String?       // referencia bancaria / numero de operacion
+  comprobanteKey  String?       // archivo del comprobante en S3
+  comprobanteName String?
+  estado          RecargaEstado @default(PENDIENTE)
+  revisadoPorId   String?
+  revisadoPor     User?         @relation("RecargaRevisadaPor", fields: [revisadoPorId], references: [id])
+  revisadoAt      DateTime?
+  notas           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  movimientos MovimientoCredito[]
+
+  @@index([clienteId, createdAt(sort: Desc)])
+  @@index([estado])
+}
+
+model MovimientoCredito {
+  id             String         @id @default(cuid())
+  clienteId      String
+  cliente        Cliente        @relation(fields: [clienteId], references: [id])
+  tipo           MovimientoTipo
+  monto          Int            // positivo = ingreso, negativo = egreso
+  saldoAntes     Int
+  saldoDespues   Int
+  recargaId      String?
+  recarga        Recarga?       @relation(fields: [recargaId], references: [id])
+  pedidoId       String?
+  pedido         Pedido?        @relation(fields: [pedidoId], references: [id])
+  actorId        String?
+  actor          User?          @relation("MovimientoActor", fields: [actorId], references: [id])
+  motivo         String?
+  createdAt      DateTime       @default(now())
+
+  @@index([clienteId, createdAt(sort: Desc)])
+  @@index([tipo])
+}
+
+// =====================================================================
+// CONFIGURACION DEL SISTEMA (singleton row id = "default")
+// =====================================================================
+
+model ConfigSistema {
+  id                    String   @id @default("default")
+  horarioInicio         String   @default("08:00") // HH:mm
+  horarioFin            String   @default("22:00") // HH:mm
+  zonaHoraria           String   @default("America/Mexico_City")
+  servicioCerradoMsg    String   @default("El servicio esta cerrado. Nuestro horario es de 8:00 AM a 10:00 PM.")
+  costoNacimiento       Int      @default(50)
+  costoMatrimonio       Int      @default(60)
+  costoDefuncion        Int      @default(60)
+  whatsappProveedor     String?
+  whatsappPlantilla     String   @default("Nuevo pedido {{folio}}: {{tipoActa}} CURP {{curp}} para {{cliente}}.")
+  emailListoAsunto      String   @default("Tu acta ya esta lista para descargar")
+  updatedAt             DateTime @updatedAt
+}
+
+// =====================================================================
+// NOTIFICACIONES + LOGS
+// =====================================================================
+
+model Notificacion {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tipo      NotificacionTipo
+  titulo    String
+  mensaje   String
+  payload   Json?
+  leida     Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, leida, createdAt(sort: Desc)])
+}
+
+model LogAccion {
+  id           String   @id @default(cuid())
+  actorId      String?
+  actor        User?    @relation(fields: [actorId], references: [id])
+  accion       String   // ej. "PEDIDO_CREAR", "RECARGA_APROBAR"
+  recursoTipo  String?  // ej. "Pedido", "Recarga"
+  recursoId    String?
+  payload      Json?
+  ip           String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+
+  @@index([actorId, createdAt(sort: Desc)])
+  @@index([recursoTipo, recursoId])
+}

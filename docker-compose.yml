@@ -1,0 +1,71 @@
+# Levanta la app + Postgres + MinIO (S3 local) para desarrollo o demo on-prem.
+# Para produccion en la nube usa Railway/Vercel + AWS S3 y olvidate de este archivo.
+
+version: '3.9'
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tramites
+      POSTGRES_PASSWORD: tramites_pw
+      POSTGRES_DB: tramites_diamante
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U tramites -d tramites_diamante']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - '9000:9000'  # S3 API
+      - '9001:9001'  # consola web
+    volumes:
+      - minio_data:/data
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql://tramites:tramites_pw@db:5432/tramites_diamante?schema=public
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: dev_secret_cambia_en_prod
+      APP_URL: http://localhost:3000
+      TIMEZONE: America/Mexico_City
+      NODE_ENV: production
+      SEED_ON_START: '1'
+      # S3 -> MinIO local
+      STORAGE_DRIVER: s3
+      S3_BUCKET: tramites-diamante
+      S3_REGION: us-east-1
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY_ID: minioadmin
+      S3_SECRET_ACCESS_KEY: minioadmin
+      S3_FORCE_PATH_STYLE: 'true'
+      S3_SIGNED_URL_TTL: '300'
+      # WhatsApp en modo wa.me para no requerir nada externo
+      WHATSAPP_DRIVER: walink
+      WHATSAPP_PROVIDER_PHONE: '5215555555555'
+      # SMTP opcional (deshabilitado si no hay)
+    ports:
+      - '3000:3000'
+
+volumes:
+  db_data:
+  minio_data:

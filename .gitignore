@@ -1,0 +1,14 @@
+node_modules
+.next
+out
+dist
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+uploads_local/*
+!uploads_local/.gitkeep
+coverage
+.vercel
+prisma/migrations/dev.db*
