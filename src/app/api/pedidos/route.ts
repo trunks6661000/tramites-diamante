@@ -7,6 +7,7 @@ import {
   Role,
   TipoActa,
 } from '@prisma/client';
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma';
 import { requireSession, withAuth, AuthError } from '@/lib/rbac';
 import { validarCurp } from '@/lib/curp';
