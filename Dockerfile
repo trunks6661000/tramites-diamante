@@ -33,6 +33,7 @@ ENV HOSTNAME=0.0.0.0
 
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 
+RUN mkdir -p ./public
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
@@ -43,10 +44,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma/client ./nod
 USER nextjs
 EXPOSE 3000
 
-# El entrypoint corre migraciones antes de levantar el servidor.
-COPY --chown=nextjs:nodejs docker-entrypoint.sh /app/docker-entrypoint.sh
-USER root
-RUN chmod +x /app/docker-entrypoint.sh
 USER nextjs
 
-CMD ["/app/docker-entrypoint.sh"]
+EXPOSE 3000
+
+CMD ["node", "server.js"]
