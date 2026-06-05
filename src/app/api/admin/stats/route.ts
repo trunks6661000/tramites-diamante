@@ -8,6 +8,7 @@ import {
 import { prisma } from '@/lib/prisma';
 import { requireRole, withAuth } from '@/lib/rbac';
 
+export const dynamic = 'force-dynamic'
 /**
  * GET /api/admin/stats
  *
