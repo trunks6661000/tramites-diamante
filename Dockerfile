@@ -42,10 +42,6 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modul
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma/client ./node_modules/@prisma/client
 
 USER nextjs
-EXPOSE 3000
-
-USER nextjs
-
-EXPOSE 3000
+EXPOSE 8080
 
 CMD ["node", "server.js"]
