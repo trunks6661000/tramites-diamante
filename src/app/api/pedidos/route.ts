@@ -152,7 +152,7 @@ export const POST = withAuth(async (req: NextRequest) => {
         userClienteId: session.user.id,
         tipoActa,
         curp,
-        datosAdicionales: datosAdicionales ?? undefined,
+        datosAdicionales: datosAdicionales ?? Prisma.JsonNull,
         creditosCobrados: costo,
         estado: PedidoEstado.PENDIENTE,
       },
