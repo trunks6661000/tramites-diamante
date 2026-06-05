@@ -10,7 +10,7 @@ WORKDIR /app
 
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma
-RUN npm ci
+RUN npm ci --legacy-peer-deps
 
 # ---------- 2. builder --------------------------------------------------------
 FROM node:20-alpine AS builder
