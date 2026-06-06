@@ -24,7 +24,7 @@ RUN npx prisma generate
 RUN npm run build
 
 # ---------- 3. runner ---------------------------------------------------------
-FROM node:20-alpine AS runner
+FROM node:20-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -34,6 +34,7 @@ ENV HOSTNAME=0.0.0.0
 RUN apk add --no-cache openssl compat-openssl11
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 
+RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p ./public
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
